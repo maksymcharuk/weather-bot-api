@@ -2,6 +2,10 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { UserContext } from '../entities/userContext.entity';
+import {
+  CreateUserContextDto,
+  UpdateUserContextDto,
+} from '../dtos/userContext.dtos';
 
 @Injectable()
 export class UserContextService {
@@ -11,30 +15,25 @@ export class UserContextService {
   ) {}
 
   async getUserContext(userId: string): Promise<UserContext> {
-    const context = await this.userContextRepository.findOne({
+    return this.userContextRepository.findOne({
       where: { userId },
     });
-    return context || { userId, location: null, conversationHistory: [] };
+  }
+
+  async creteUserContext(
+    userContext: CreateUserContextDto,
+  ): Promise<UserContext> {
+    const context = this.userContextRepository.create(userContext);
+    return this.userContextRepository.save(context);
   }
 
   async updateUserContext(
-    userId: string,
-    data: Partial<UserContext>,
+    userContext: UpdateUserContextDto,
   ): Promise<UserContext> {
-    const context = await this.userContextRepository.findOne({
-      where: { userId },
-    });
-
-    if (context) {
-      // Update existing record
-      context.location = data.location || context.location;
-      context.conversationHistory =
-        data.conversationHistory || context.conversationHistory;
-      return this.userContextRepository.save(context);
-    } else {
-      // Create new record
-      const newContext = this.userContextRepository.create({ userId, ...data });
-      return this.userContextRepository.save(newContext);
-    }
+    await this.userContextRepository.update(
+      { userId: userContext.userId },
+      userContext.data,
+    );
+    return this.getUserContext(userContext.userId);
   }
 }

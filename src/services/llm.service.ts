@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { ClientOptions, OpenAI } from 'openai';
+import { ChatCompletionMessageParam } from 'openai/src/resources/chat/completions';
 import { UserContext } from '../entities/userContext.entity';
+import { BASE_PROMPT } from '../prompts/base.prompt';
 
 export interface AnalyzedResponse {
   clarificationNeeded: boolean;
@@ -19,17 +21,21 @@ export class LLMService {
     this.openai = new OpenAI(configuration);
   }
 
-  async generateResponse(prompt: string): Promise<string> {
+  async generateResponse(
+    userMessage: string,
+    contextMessages: ChatCompletionMessageParam[] = [],
+  ): Promise<string> {
     const response = await this.openai.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [
         {
           role: 'system',
-          content: 'You are a helpful weather forecast assistant.',
+          content: BASE_PROMPT,
         },
+        ...contextMessages,
         {
           role: 'user',
-          content: prompt,
+          content: userMessage,
         },
       ],
     });

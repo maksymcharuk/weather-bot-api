@@ -3,7 +3,7 @@ export interface Weather {
   current: Current;
 }
 
-export interface WeatherWithForecast extends Weather {
+export interface WeatherHistory extends Weather {
   forecast: Forecast;
 }
 

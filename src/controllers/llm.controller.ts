@@ -15,12 +15,13 @@ export class LLMController {
   async generateResponse(
     @Body() { userId, message }: { userId: string; message: string },
   ): Promise<string> {
-    const context = await this.userContextService.getUserContext(userId);
-    const prompt = `${
-      context ? `Previous context: ${context}` : ''
-    }\nUser: ${message}`;
+    let context = await this.userContextService.getUserContext(userId);
 
-    let response = await this.llmService.generateResponse(prompt);
+    if (!context) {
+      context = await this.userContextService.creteUserContext({ userId });
+    }
+
+    let response;
     const { clarificationNeeded, location, date } =
       await this.llmService.analyzeMessage(message, context);
 
@@ -33,10 +34,14 @@ export class LLMController {
     } else if (location) {
       let weatherData;
       try {
-        weatherData = await this.weatherService.getWeatherData(
-          location,
-          new Date(date),
-        );
+        if (date) {
+          weatherData = await this.weatherService.getHistoryWeather(
+            location,
+            new Date(date),
+          );
+        } else {
+          weatherData = await this.weatherService.getCurrentWeather(location);
+        }
       } catch (error) {
         return await this.llmService.generateResponse(
           `Error fetching weather data for location: ${location} and date: ${date}. 
@@ -61,7 +66,7 @@ export class LLMController {
     context.conversationHistory.push({ role: 'user', content: message });
 
     // Load user context from API server
-    await this.userContextService.updateUserContext(userId, context);
+    await this.userContextService.updateUserContext({ userId, data: context });
 
     return response;
   }

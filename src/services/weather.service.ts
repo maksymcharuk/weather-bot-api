@@ -1,30 +1,48 @@
 import { Injectable } from '@nestjs/common';
 import axios from 'axios';
-import { Weather, WeatherWithForecast } from 'src/types/weather.types';
+import { Weather, WeatherHistory } from '../types/weather.types';
 
 @Injectable()
 export class WeatherService {
-  apiKey = process.env.WEATHER_API_KEY;
-  apiBaseUrl = 'https://api.weatherapi.com/v1/history.json';
+  private readonly weatherApi = axios.create({
+    baseURL: 'https://api.weatherapi.com/v1/',
+    params: {
+      key: process.env.WEATHER_API_KEY,
+    },
+  });
 
-  async getWeatherData(
-    location: string,
-    date: Date,
-  ): Promise<WeatherWithForecast>;
-
-  async getWeatherData(location: string, date?: Date): Promise<Weather> {
-    const formattedDate = date.toISOString().split('T')[0];
+  async getCurrentWeather(location: string): Promise<Weather> {
     let response;
 
     try {
-      response = await axios.get(this.apiBaseUrl, {
+      response = await this.weatherApi.get('current.json', {
         params: {
-          key: this.apiKey,
           q: location,
-          dt: formattedDate,
         },
       });
     } catch (error) {
+      console.error('Error fetching weather data', error);
+      throw new Error('Error fetching weather data');
+    }
+
+    return response.data;
+  }
+
+  async getHistoryWeather(
+    location: string,
+    date: Date,
+  ): Promise<WeatherHistory> {
+    let response;
+
+    try {
+      response = await this.weatherApi.get('history.json', {
+        params: {
+          q: location,
+          dt: date.toISOString().split('T')[0],
+        },
+      });
+    } catch (error) {
+      console.error('Error fetching weather data', error);
       throw new Error('Error fetching weather data');
     }
 
