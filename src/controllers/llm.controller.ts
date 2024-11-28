@@ -1,14 +1,20 @@
-import { Controller, Get, Put, Body, Param, Post } from '@nestjs/common';
+import { Controller, Body, Post, Get, Param, Query } from '@nestjs/common';
+import { ChatCompletionMessageParam } from 'openai/src/resources/chat/completions';
 import { UserContextService } from '../services/userContext.service';
 import { LLMService } from '../services/llm.service';
-import { WeatherService } from 'src/services/weather.service';
+import { WeatherService } from '../services/weather.service';
+import {
+  CallServiceRequest,
+  DelegatorService,
+} from '../services/delegator.service';
+import { Weather, WeatherHistory } from '../types/weather.types';
 
 @Controller('llm')
 export class LLMController {
   constructor(
-    private readonly weatherService: WeatherService,
     private readonly userContextService: UserContextService,
     private readonly llmService: LLMService,
+    private readonly delegatorService: DelegatorService,
   ) {}
 
   @Post('generate-response')
@@ -16,58 +22,109 @@ export class LLMController {
     @Body() { userId, message }: { userId: string; message: string },
   ): Promise<string> {
     let context = await this.userContextService.getUserContext(userId);
+    let maxProcessOperations = 5;
 
-    if (!context) {
-      context = await this.userContextService.creteUserContext({ userId });
-    }
+    const basicMessages: ChatCompletionMessageParam[] = [
+      {
+        role: 'system',
+        content: `
+          Current date: ${new Date().toDateString()},
+          User ID: ${userId},
+          Conversation history: ${context.conversationHistory
+            .slice(-5)
+            .map((item) => `${item.role}: ${item.content}`)
+            .join(', ')},
+          Memories: ${context.memories.join(', ')},
+        `,
+      },
+      {
+        role: 'user',
+        content: message,
+      },
+    ];
 
-    let response;
-    const { clarificationNeeded, location, date } =
-      await this.llmService.analyzeMessage(message, context);
+    let initialResponse = await this.llmService.generateResponse([
+      ...basicMessages,
+    ]);
 
-    if (clarificationNeeded) {
-      response = await this.llmService.generateResponse(
-        `Check context and user's message and if needed ask user for clarification to get the necessary information. It can be about location, date, or other information\n
-        ${context ? `Previous context: ${context}` : ''}\n 
-        User message: ${message}`,
-      );
-    } else if (location) {
-      let weatherData;
+    const processResponse = async (response: string): Promise<string> => {
       try {
-        if (date) {
-          weatherData = await this.weatherService.getHistoryWeather(
-            location,
-            new Date(date),
-          );
-        } else {
-          weatherData = await this.weatherService.getCurrentWeather(location);
+        maxProcessOperations--;
+
+        if (maxProcessOperations <= 0) {
+          return this.llmService.generateResponse([
+            ...basicMessages,
+            {
+              role: 'system',
+              content: `
+                Max process operations reached.
+              `,
+            },
+          ]);
+        }
+
+        const apiRequests: CallServiceRequest[] = JSON.parse(response);
+        const apiResponses: Array<{ service: string; response: any }> = [];
+
+        try {
+          for (const apiRequest of apiRequests) {
+            const response = await this.delegatorService.callService(
+              apiRequest.service,
+              apiRequest.method,
+              apiRequest.data,
+            );
+
+            apiResponses.push({
+              service: apiRequest.service,
+              response,
+            });
+          }
+
+          response = await this.llmService.generateResponse([
+            ...basicMessages,
+            {
+              role: 'system',
+              content: `
+                Recived response: ${JSON.stringify(apiResponses)}.
+              `,
+            },
+          ]);
+
+          return processResponse(response);
+        } catch (error) {
+          console.error('Error calling services', error);
+
+          return this.llmService.generateResponse([
+            ...basicMessages,
+            {
+              role: 'system',
+              content: `
+                Error calling services: ${error.message}.
+              `,
+            },
+          ]);
         }
       } catch (error) {
-        return await this.llmService.generateResponse(
-          `Error fetching weather data for location: ${location} and date: ${date}. 
-          Date must be not in the past and not later than 14 days from today. 
-          Today is ${new Date().toDateString()}.:
-          `,
-        );
+        return response;
       }
+    };
 
-      response = await this.llmService.generateResponse(`
-        Check context, message and weather data in JSON and provide human-friendly response to the user\n
-        Weather data JSON string: ${JSON.stringify(weatherData)}, where
-        "temp_c" is the temperature in Celsius,
-        "condition" is a JSON object with the weather conditions,
-        and other fields are self-explanatory.
-        Message: ${message},
-        Context: ${context ? `Previous context: ${context}` : 'no context'}
-      `);
-    }
+    const finalResponse = await processResponse(initialResponse);
 
-    // Append user message to conversation history
-    context.conversationHistory.push({ role: 'user', content: message });
+    await this.userContextService.addConversationHistory({
+      userId,
+      conversationHistory: [
+        {
+          role: 'user',
+          content: message,
+        },
+        {
+          role: 'system',
+          content: finalResponse,
+        },
+      ],
+    });
 
-    // Load user context from API server
-    await this.userContextService.updateUserContext({ userId, data: context });
-
-    return response;
+    return finalResponse;
   }
 }

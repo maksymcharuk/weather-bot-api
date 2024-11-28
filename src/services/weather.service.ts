@@ -11,38 +11,63 @@ export class WeatherService {
     },
   });
 
-  async getCurrentWeather(location: string): Promise<Weather> {
+  async getCurrentWeather(data: { location: string }): Promise<Weather> {
     let response;
 
     try {
       response = await this.weatherApi.get('current.json', {
         params: {
-          q: location,
+          q: data.location,
         },
       });
     } catch (error) {
-      console.error('Error fetching weather data', error);
+      console.log('Error fetching weather data', error.response.data.error);
       throw new Error('Error fetching weather data');
     }
 
     return response.data;
   }
 
-  async getHistoryWeather(
-    location: string,
-    date: Date,
-  ): Promise<WeatherHistory> {
+  // Between today and next 14 day
+  async getForecastWeather(data: {
+    location: string;
+    date: Date | string;
+  }): Promise<WeatherHistory> {
     let response;
+    const date = new Date(data.date);
 
     try {
-      response = await this.weatherApi.get('history.json', {
+      response = await this.weatherApi.get('forecast.json', {
         params: {
-          q: location,
+          q: data.location,
           dt: date.toISOString().split('T')[0],
         },
       });
     } catch (error) {
-      console.error('Error fetching weather data', error);
+      console.log('Error fetching weather data', error.response.data.error);
+      throw new Error('Error fetching weather data');
+    }
+
+    return response.data;
+  }
+
+  // Between 14 days and 300 days from today in the future
+  async getFutureWeather(data: {
+    location: string;
+    date: Date | string;
+  }): Promise<WeatherHistory> {
+    let response;
+    const date = new Date(data.date);
+
+    try {
+      response = await this.weatherApi.get('future.json', {
+        params: {
+          q: data.location,
+          dt: date.toISOString().split('T')[0],
+        },
+      });
+    } catch (error) {
+      console.log('Error fetching weather data', error.response.data.error);
       throw new Error('Error fetching weather data');
     }
 

@@ -7,6 +7,7 @@ import { LLMController } from './controllers/llm.controller';
 import { WeatherService } from './services/weather.service';
 import { UserContextService } from './services/userContext.service';
 import { LLMService } from './services/llm.service';
+import { DelegatorService } from './services/delegator.service';
 
 import { UserContext } from './entities/userContext.entity';
 
@@ -28,6 +29,6 @@ import { UserContext } from './entities/userContext.entity';
     TypeOrmModule.forFeature([UserContext]),
   ],
   controllers: [LLMController],
-  providers: [WeatherService, UserContextService, LLMService],
+  providers: [WeatherService, UserContextService, LLMService, DelegatorService],
 })
 export class AppModule {}
